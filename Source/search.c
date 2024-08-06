@@ -301,8 +301,7 @@ static inline void score_move(position_t *pos, thread_t *thread,
     }
 
     // score move by MVV LVA lookup [source piece][target piece]
-    move_entry->score =
-        mvv_lva[get_move_piece(move)][target_piece];
+    move_entry->score = mvv_lva[get_move_piece(move)][target_piece];
     move_entry->score += SEE(pos, move, -107) ? 1000000000 : -1000000;
     return;
   }
@@ -430,7 +429,8 @@ static inline int quiescence(position_t *pos, thread_t *thread, int alpha,
   // loop over moves within a movelist
   for (uint32_t count = 0; count < move_list->count; count++) {
 
-    if (!SEE(pos, move_list->entry[count].move, -7)) continue;
+    if (!SEE(pos, move_list->entry[count].move, -7))
+      continue;
 
     // preserve board state
     copy_board(pos->bitboards, pos->occupancies, pos->side, pos->enpassant,
@@ -762,16 +762,18 @@ static inline int negamax(position_t *pos, thread_t *thread, int alpha,
     if (skip_quiets && quiet) {
       continue;
     }
+    if (!root_node && best_score > -mate_score) {
+      // Late Move Pruning
+      if (quiet && legal_moves > LMP_BASE + LMP_MULTIPLIER * depth * depth) {
+        skip_quiets = 1;
+      }
 
-    // Late Move Pruning
-    if (!pv_node && !in_check && quiet &&
-        legal_moves > LMP_BASE + LMP_MULTIPLIER * depth * depth) {
-      skip_quiets = 1;
+      const int see_threshold = quiet ? -67 * depth : -32 * depth * depth;
+      if (depth <= 10 && legal_moves > 0 &&
+          !SEE(pos, list_move, see_threshold)) {
+        continue;
+      }
     }
-
-    const int see_threshold = quiet ? -67 * depth : -32 * depth * depth;
-    if (depth <= 10 && legal_moves > 0 && !SEE(pos, list_move, see_threshold))
-      continue;
 
     int move = move_list->entry[count].move;
     uint8_t is_quiet = get_move_capture(move) == 0;
