@@ -7,8 +7,8 @@
 #include "move.h"
 #include "movegen.h"
 #include "nnue.h"
-#include "see.h"
 #include "pyrrhic/tbprobe.h"
+#include "see.h"
 #include "structs.h"
 #include "syzygy.h"
 #include "threads.h"
@@ -59,6 +59,7 @@ int ASP_WINDOW = 11;
 int ASP_DEPTH = 4;
 int QS_SEE_THRESHOLD = 6;
 int MO_SEE_THRESHOLD = 130;
+int PROBCUT_ADDITION = 350;
 double ASP_MULTIPLIER = 1.6541989293231878;
 int LMR_QUIET_HIST_DIV = 7323;
 int LMR_CAPT_HIST_DIV = 7534;
@@ -214,7 +215,6 @@ static inline int is_repetition(position_t *pos) {
   return 0;
 }
 
-
 static inline uint8_t is_material_draw(position_t *pos) {
   uint8_t piece_count = __builtin_popcountll(pos->occupancies[both]);
 
@@ -361,7 +361,8 @@ static inline int quiescence(position_t *pos, thread_t *thread,
 
     thread->nodes++;
 
-    if (!is_move_promotion(move_list->entry[count].move) || !get_move_capture(move_list->entry[count].move)) {
+    if (!is_move_promotion(move_list->entry[count].move) ||
+        !get_move_capture(move_list->entry[count].move)) {
       add_move(capture_list, move_list->entry[count].move);
     }
 
@@ -531,7 +532,8 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
     }
 
     // null move pruning
-    if (do_nmp && !pv_node && ss->static_eval >= beta && depth >= 3 && !only_pawns(pos)) {
+    if (do_nmp && !pv_node && ss->static_eval >= beta && depth >= 3 &&
+        !only_pawns(pos)) {
       int R = MIN((ss->static_eval - beta) / NMP_RED_DIVISER, NMP_RED_MIN) +
               depth / NMP_DIVISER + NMP_BASE_REDUCTION;
       R = MIN(R, depth);
@@ -596,6 +598,70 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
       const int razor_score = quiescence(pos, thread, ss, alpha, beta);
       if (razor_score <= alpha) {
         return razor_score;
+      }
+    }
+  }
+
+  int probcut_beta = beta + PROBCUT_ADDITION;
+  if (!pv_node && !in_check && depth > 3 &&
+      !(tt_hit && tt_depth >= depth - 3 && tt_score < probcut_beta)) {
+    moves capture_promos[1];
+    int score = -INF - 1;
+
+    generate_captures(pos, capture_promos);
+    for (uint32_t count = 0; count < capture_promos->count; count++) {
+      score_move(pos, thread, ss, &capture_promos->entry[count], tt_move);
+    }
+
+    for (uint32_t count = 0; count < capture_promos->count; count++) {
+      int move = capture_promos->entry[count].move;
+      copy_board(pos->bitboards, pos->occupancies, pos->side, pos->enpassant,
+                 pos->castle, pos->fifty, pos->hash_key, pos->mailbox);
+      thread->accumulator[pos->ply + 1] = thread->accumulator[pos->ply];
+
+      // increment ply
+      pos->ply++;
+
+      // increment repetition index & store hash key
+      pos->repetition_index++;
+      pos->repetition_table[pos->repetition_index] = pos->hash_key;
+
+      // make sure to make only legal moves
+      if (make_move(pos, move, all_moves) == 0) {
+        // decrement ply
+        pos->ply--;
+
+        // decrement repetition index
+        pos->repetition_index--;
+
+        // skip to next move
+        continue;
+      }
+
+      accumulator_make_move(&thread->accumulator[pos->ply],
+                            &thread->accumulator[pos->ply - 1], pos->side, move,
+                            mailbox_copy);
+
+      score =
+          -quiescence(pos, thread, ss + 1, -probcut_beta, -probcut_beta + 1);
+
+      if (score >= probcut_beta) {
+        score = -negamax(pos, thread, ss + 1, -probcut_beta, -probcut_beta + 1,
+                         depth - 4, 1, !cutnode);
+      }
+
+      pos->ply--;
+
+      // decrement repetition index
+      pos->repetition_index--;
+
+      restore_board(pos->bitboards, pos->occupancies, pos->side, pos->enpassant,
+                    pos->castle, pos->fifty, pos->hash_key, pos->mailbox);
+
+      if (score >= probcut_beta) {
+        write_hash_entry(pos, score, depth - 3, move, HASH_FLAG_LOWER_BOUND);
+
+        return score;
       }
     }
   }
@@ -777,7 +843,8 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
     if (depth > 1 && legal_moves > 2 + 2 * pv_node) {
       int R = lmr[quiet][depth][MIN(255, legal_moves)] * 1024;
       R += !pv_node * LMR_PV_NODE;
-      R -= ss->history_score * LMR_HISTORY / (quiet ? LMR_QUIET_HIST_DIV : LMR_CAPT_HIST_DIV);
+      R -= ss->history_score * LMR_HISTORY /
+           (quiet ? LMR_QUIET_HIST_DIV : LMR_CAPT_HIST_DIV);
       R -= in_check * LMR_IN_CHECK;
       R += cutnode * LMR_CUTNODE;
       R -= (tt_depth >= depth) * LMR_TT_DEPTH;
