@@ -538,7 +538,7 @@ static inline int quiescence(position_t *pos, thread_t *thread,
       alpha = score;
     }
   }
-  write_hash_entry(pos, best_score, 0, raw_static_eval, best_move, hash_flag);
+  write_hash_entry(pos, best_score, raw_static_eval, 0, best_move, hash_flag);
   // node (position) fails low
   return best_score;
 }
@@ -590,7 +590,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
 
   // variable to store current move's score (from the static evaluation
   // perspective)
-  int score, raw_static_eval = -INF;
+  int score, static_eval = -INF;
 
   int tt_move = 0;
   int16_t tt_score = NO_SCORE;
@@ -660,9 +660,10 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
                                         : __builtin_ctzll(pos->bitboards[k]),
                                     pos->side ^ 1);
   if (!ss->excluded_move) {
-    raw_static_eval = ss->static_eval =
+    static_eval = ss->static_eval =
         in_check ? INF
-                 : (tt_static_eval != NO_SCORE
+                 : (tt_hit ? tt_score
+                    : tt_static_eval != NO_SCORE
                         ? tt_static_eval
                         : evaluate(pos, &thread->accumulator[pos->ply]));
   }
@@ -670,7 +671,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
   uint8_t improving = 0;
 
   if (!in_check && (ss - 2)->static_eval != NO_SCORE) {
-    improving = raw_static_eval > (ss - 2)->static_eval;
+    improving = static_eval > (ss - 2)->static_eval;
   }
 
   // Check on time
@@ -699,14 +700,14 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
       int eval_margin = RFP_MARGIN * depth;
 
       // evaluation margin substracted from static evaluation score fails high
-      if (raw_static_eval - eval_margin >= beta)
+      if (static_eval - eval_margin >= beta)
         // evaluation margin substracted from static evaluation score
-        return (raw_static_eval + beta) / 2;
+        return (static_eval + beta) / 2;
     }
 
     // null move pruning
-    if (do_nmp && !pv_node && raw_static_eval >= beta && !only_pawns(pos)) {
-      int R = MIN((raw_static_eval - beta) / NMP_RED_DIVISER, NMP_RED_MIN) +
+    if (do_nmp && !pv_node && static_eval >= beta && !only_pawns(pos)) {
+      int R = MIN((static_eval - beta) / NMP_RED_DIVISER, NMP_RED_MIN) +
               depth / NMP_DIVISER + NMP_BASE_REDUCTION;
       R = MIN(R, depth);
       // preserve board state
@@ -766,7 +767,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
     }
 
     if (!pv_node && depth <= RAZOR_DEPTH &&
-        raw_static_eval + RAZOR_MARGIN * depth < alpha) {
+        static_eval + RAZOR_MARGIN * depth < alpha) {
       const int razor_score = quiescence(pos, thread, ss, alpha, beta);
       if (razor_score <= alpha) {
         return razor_score;
@@ -1018,7 +1019,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
         if (score >= beta) {
           if (!ss->excluded_move) {
             // store hash entry with the score equal to beta
-            write_hash_entry(pos, best_score, raw_static_eval, depth, best_move,
+            write_hash_entry(pos, best_score, static_eval, depth, best_move,
                              HASH_FLAG_BETA);
           }
 
@@ -1054,7 +1055,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
 
   if (!ss->excluded_move) {
     // store hash entry with the score equal to alpha
-    write_hash_entry(pos, best_score, raw_static_eval, depth, best_move, hash_flag);
+    write_hash_entry(pos, best_score, static_eval, depth, best_move, hash_flag);
   }
 
   // node (position) fails low
