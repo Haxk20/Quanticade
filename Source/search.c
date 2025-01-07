@@ -415,7 +415,7 @@ static inline int quiescence(position_t *pos, thread_t *thread,
   }
 
   int32_t best_move = 0;
-  int score, best_score = 0;
+  int score, best_score = -INF;
   int pv_node = beta - alpha > 1;
   int hash_flag = HASH_FLAG_ALPHA;
   int16_t tt_score = 0;
@@ -434,32 +434,34 @@ static inline int quiescence(position_t *pos, thread_t *thread,
     }
   }
 
-  // evaluate position
-  score = best_score =
-      tt_hit ? tt_score : evaluate(pos, &thread->accumulator[pos->ply]);
-  ;
-
-  // fail-hard beta cutoff
-  if (score >= beta) {
-    // node (position) fails high
-    return score;
-  }
-
-  // found a better move
-  if (score > alpha) {
-    // PV node (position)
-    alpha = score;
-  }
-
-  // create move list instance
-  moves move_list[1];
-
-  // is king in check
+    // is king in check
   int in_check = is_square_attacked(pos,
                                     (pos->side == white)
                                         ? __builtin_ctzll(pos->bitboards[K])
                                         : __builtin_ctzll(pos->bitboards[k]),
                                     pos->side ^ 1);
+
+  if (!in_check) {
+    // evaluate position
+    score = best_score =
+        tt_hit ? tt_score : evaluate(pos, &thread->accumulator[pos->ply]);
+
+    // fail-hard beta cutoff
+    if (score >= beta) {
+      // node (position) fails high
+     return score;
+    }
+
+    // found a better move
+    if (score > alpha) {
+      // PV node (position)
+      alpha = score;
+    }
+  }
+
+  // create move list instance
+  moves move_list[1];
+
   if (in_check) {
     generate_moves(pos, move_list);
   } else {
