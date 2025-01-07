@@ -415,7 +415,7 @@ static inline int quiescence(position_t *pos, thread_t *thread,
   }
 
   int32_t best_move = 0;
-  int score, best_score = -INF;
+  int score, best_score = NO_SCORE;
   int pv_node = beta - alpha > 1;
   int hash_flag = HASH_FLAG_ALPHA;
   int16_t tt_score = 0;
