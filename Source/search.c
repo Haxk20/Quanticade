@@ -769,6 +769,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
       R -= in_check;
       R += cutnode;
       R -= tt_depth >= depth;
+      R += !improving;
       R = clamp(R, 1, new_depth);
       current_score = -negamax(pos, thread, ss + 1, -alpha - 1, -alpha,
                                new_depth - R + 1, 1, 1);
