@@ -672,6 +672,11 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
     if (depth <= SEE_DEPTH && legal_moves > 0 && !SEE(pos, move, see_threshold))
       continue;
 
+    if (lmr_depth <= 5 && quiet && ss->history_score < -2314 * depth - 1157) {
+      skip_quiets = 1;
+      continue;
+    }
+
     int extensions = 0;
 
     // Singular Extensions
