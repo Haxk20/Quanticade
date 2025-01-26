@@ -13,6 +13,8 @@ spsa_t spsa[100];
 uint8_t spsa_index = 0;
 
 // search.c
+extern int HIST_PRUNING_MULTIPLIER;
+extern int HIST_PRUNING_NEGATOR;
 extern int LMP_BASE;
 extern int LMP_MULTIPLIER;
 extern int RAZOR_DEPTH;
@@ -108,6 +110,8 @@ void add_int_spsa(char name[], int *value, int min, int max, double rate,
   add_int_spsa(NAME, &VARIABLE, 1, SPSA_MAX(VARIABLE), RATE(VARIABLE), NULL, TUNABLE)
 
 void init_spsa_table(void) {
+  SPSA_INT(HIST_PRUNING_MULTIPLIER, 1);
+  SPSA_INT(HIST_PRUNING_NEGATOR, 1);
   SPSA_INT(LMP_BASE, 1);
   SPSA_INT(LMP_MULTIPLIER, 0);
   SPSA_INT(RAZOR_DEPTH, 0);

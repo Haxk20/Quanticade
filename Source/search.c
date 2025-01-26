@@ -30,6 +30,8 @@ extern int thread_count;
 
 extern keys_t keys;
 
+int HIST_PRUNING_MULTIPLIER = 2314;
+int HIST_PRUNING_NEGATOR = 1157;
 int LMP_BASE = 3;
 int LMP_MULTIPLIER = 1;
 int RAZOR_DEPTH = 7;
@@ -672,7 +674,7 @@ static inline int negamax(position_t *pos, thread_t *thread, searchstack_t *ss,
     if (depth <= SEE_DEPTH && legal_moves > 0 && !SEE(pos, move, see_threshold))
       continue;
 
-    if (lmr_depth <= 5 && quiet && ss->history_score < -2314 * depth - 1157) {
+    if (lmr_depth <= 5 && quiet && ss->history_score < -HIST_PRUNING_MULTIPLIER * depth - HIST_PRUNING_NEGATOR) {
       skip_quiets = 1;
       continue;
     }
