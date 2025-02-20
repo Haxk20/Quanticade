@@ -266,7 +266,6 @@ static inline int quiescence(position_t *pos, thread_t *thread,
   if (pos->ply > MAX_PLY - 1)
     // evaluate position
     return evaluate(pos, &thread->accumulator[pos->ply]);
-  ;
 
   if (pos->ply > pos->seldepth) {
     pos->seldepth = pos->ply;
@@ -294,7 +293,6 @@ static inline int quiescence(position_t *pos, thread_t *thread,
   // evaluate position
   score = best_score =
       tt_hit ? tt_score : evaluate(pos, &thread->accumulator[pos->ply]);
-  ;
 
   // fail-hard beta cutoff
   if (score >= beta) {
@@ -327,6 +325,12 @@ static inline int quiescence(position_t *pos, thread_t *thread,
 
     if (!SEE(pos, move_list->entry[count].move, -QS_SEE_THRESHOLD))
       continue;
+      
+    const int futilityBase = ss->static_eval + 280;
+    if (futilityBase <= alpha && !SEE(pos, move_list->entry[count].move, 1)) {
+        best_score = MAX(futilityBase, best_score);
+        continue;
+    }
 
     // preserve board state
     copy_board(pos->bitboards, pos->occupancies, pos->side, pos->enpassant,
